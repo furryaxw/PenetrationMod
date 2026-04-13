@@ -4,7 +4,7 @@ using UnityEngine;
 using Il2CppProperties;
 using Il2CppDynamicGUI;
 
-[assembly: MelonInfo(typeof(PenetrationMod.PenetrationModMain), "Penetration Limit Modifier", "1.1.0", "furryAxw")]
+[assembly: MelonInfo(typeof(PenetrationMod.PenetrationModMain), "Penetration Limit Modifier", "1.2.0", "furryAxw")]
 [assembly: MelonGame("HD", "Sprocket")]
 
 namespace PenetrationMod
@@ -16,7 +16,15 @@ namespace PenetrationMod
         // 用于保存协程引用，方便在退出场景时立刻停止它
         private object? monitorCoroutine;
 
-        private float NewMaxPenetration = 2000f;
+        // 逻辑极限值
+        private float NewMaxPenetration = 20000f;
+        private float NewMinCaliber = 1f;
+        private float NewMaxCaliber = 5000f;
+
+        // UI 拖动条极限值
+        private float SliderNewMaxPenetration = 1000f;
+        private float SliderNewMinCaliber = 1f;
+        private float SliderNewMaxCaliber = 500f;
 
         public override void OnSceneWasLoaded(int buildIndex, string sceneName)
         {
@@ -46,43 +54,72 @@ namespace PenetrationMod
 
         private IEnumerator MonitorSlidersContinuous()
         {
-            // 只要还在编辑模式，就一直循环检测
+            // 性能优化：缓存 GameObject，避免高频调用 GameObject.Find
+            GameObject configPanel = null;
+
             while (isInDesigner)
             {
-                // 寻找 ConfigPanel (仅查找当前激活的对象，性能开销小)
-                GameObject configPanel = GameObject.Find("ConfigPanel");
-
-                if (configPanel != null)
+                if (configPanel == null)
                 {
-                    // 获取 ConfigPanel 下所有的 PropertyFieldSlider 组件 (包含被隐藏的)
-                    var sliders = configPanel.GetComponentsInChildren<PropertyFieldSlider>(true);
-
-                    foreach (var slider in sliders)
+                    configPanel = GameObject.Find("ConfigPanel");
+                    // 如果当前帧没找到（UI可能还没实例化完），等待下一帧再试
+                    if (configPanel == null)
                     {
-                        FloatProperty prop = slider.prop;
+                        yield return new WaitForSeconds(0.5f);
+                        continue;
+                    }
+                }
 
-                        if (prop != null && (prop.Name == "Penetration" || prop.name == "Penetration"))
+                // 获取所有的 PropertyFieldSlider
+                var propertySliders = configPanel.GetComponentsInChildren<PropertyFieldSlider>(true);
+
+                // 根据你提供的信息，如果不想依赖 prop.Name，也可以通过索引判断
+                // 但通过 prop.Name 判定是最具备鲁棒性的做法
+                foreach (var propSlider in propertySliders)
+                {
+                    FloatProperty prop = propSlider.prop;
+                    if (prop == null) continue;
+
+                    // 【核心逻辑】：通过具有身份的父级组件，向下抓取无名的 UI Slider 组件
+                    UnityEngine.UI.Slider uiSlider = propSlider.GetComponentInChildren<UnityEngine.UI.Slider>(true);
+
+                    if (uiSlider == null) continue;
+
+                    // ---------------- 1. 对应 Penetration 参数 ----------------
+                    if (prop.Name == "Penetration" || prop.name == "Penetration")
+                    {
+                        // 修改底层游戏逻辑最大值
+                        if (prop.Max != NewMaxPenetration)
                         {
-                            // 检查当前值，如果已经被修改过了，就不再重复赋值和打印日志
-                            if (prop.Max != NewMaxPenetration)
-                            {
-                                try
-                                {
-                                    prop.Max = NewMaxPenetration;
-                                }
-                                catch (System.Exception ex)
-                                {
-                                    MelonLogger.Error($"修改属性时发生错误: {ex.Message}");
-                                }
-                            }
+                            prop.Max = NewMaxPenetration;
+                        }
 
-                            // 既然已经找到了 Penetration 并处理完毕，可以跳出当前 foreach 循环
-                            break;
+                        // 修改 UI 面板上的 Slider 拖动上限 (Unity 暴漏的属性是 maxValue/minValue)
+                        if (uiSlider.maxValue != SliderNewMaxPenetration)
+                        {
+                            uiSlider.maxValue = SliderNewMaxPenetration;
+                        }
+                    }
+                    // ---------------- 2. 对应 Caliber 参数 ----------------
+                    else if (prop.Name == "Caliber" || prop.name == "Caliber")
+                    {
+                        // 指正：修复了你原代码中复制粘贴导致的 Caliber 变量引用错误
+                        if (prop.Min != NewMinCaliber) prop.Min = NewMinCaliber;
+                        if (prop.Max != NewMaxCaliber) prop.Max = NewMaxCaliber;
+
+                        // 修改 UI 面板上的 Slider 拖动下限和上限
+                        if (uiSlider.minValue != SliderNewMinCaliber)
+                        {
+                            uiSlider.minValue = SliderNewMinCaliber;
+                        }
+                        if (uiSlider.maxValue != SliderNewMaxCaliber)
+                        {
+                            uiSlider.maxValue = SliderNewMaxCaliber;
                         }
                     }
                 }
 
-                // 每隔 0.5 秒检测一次。这个频率对 UI 响应来说足够快，且对游戏帧数几乎零影响。
+                // 0.1s 的检查频率
                 yield return new WaitForSeconds(0.1f);
             }
         }
