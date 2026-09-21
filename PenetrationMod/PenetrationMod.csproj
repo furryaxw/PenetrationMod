@@ -34,6 +34,10 @@
     <Reference Include="MelonLoader">
       <HintPath>..\..\..\MelonLoader\net6\MelonLoader.dll</HintPath>
     </Reference>
+    <Reference Include="SprocketModAPI">
+      <HintPath>..\..\..\Mods\SprocketModAPI.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
     <Reference Include="UnityEngine.CoreModule">
       <HintPath>..\..\..\MelonLoader\Il2CppAssemblies\UnityEngine.CoreModule.dll</HintPath>
     </Reference>
@@ -42,7 +46,7 @@
     </Reference>
   </ItemGroup>
 
-  <Target Name="PostBuild" AfterTargets="PostBuildEvent">
+  <Target Name="PostBuild" AfterTargets="PostBuildEvent" Condition="'$(SkipModDeploy)' != 'true'">
     <Exec Command="copy /Y &quot;$(TargetPath)&quot; &quot;G:\Sprocket\Mods\&quot;" />
   </Target>
 
